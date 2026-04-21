@@ -1,45 +1,51 @@
-# Local SRE Platform Infrastructure
+# SRE Platform Infrastructure
 
-This repository manages the local **SRE Control Plane** (NetBox & Jenkins). It is designed to manage any number of network sites (e.g., `syd1`, `mel1`) by connecting to them via their management IP addresses.
+Local SRE control plane for managing SONiC-VS datacenter fabrics.
+
+## Services
+
+| Service | Port | Description |
+|---------|------|-------------|
+| NetBox | http://localhost:8000 | Network inventory and IPAM |
+| Jenkins | http://localhost:8080 | CI/CD pipeline orchestration |
+| ansible-agent | — | Jenkins build agent with Ansible + fping |
 
 ## Prerequisites
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) 
-## 1. Start the Platform (NetBox & Jenkins)
-To spin up the core SRE services, run:
-```bash
-docker-compose up -d
-```
-- **NetBox:** [http://localhost:8000](http://localhost:8000) (Default Token: `0123456789abcdef0123456789abcdef01234567`)
-- **Jenkins:** [http://localhost:8080](http://localhost:8080)
 
-## 2. Initialize Platform Metadata
-Before syncing any network data, run the initialization script to prepare standard roles and manufacturers:
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+
+## Quick Start
+
 ```bash
+# Create the external network (one-time)
+docker network create sre-mgmt-net
+
+# Start all services
+docker-compose up -d
+
+# Initialize NetBox with standard roles and manufacturers
 python3 scripts/netbox_initial_setup.py
 ```
 
-## 3. Onboarding a New Site (e.g., mel1)
-To add a new site to the ecosystem:
-1.  **Bootstrap the data:**
-    ```bash
-    python3 ../NetworkAutomationCore/scripts/bootstrap_new_site.py mel1 "Melbourne Branch"
-    ```
-2.  **Edit the data:** Modify `NetworkInventoryData/intent/sites/mel1/devices.yml` to set the correct management IPs.
-3.  **Sync to NetBox:**
-    ```bash
-    python3 ../NetworkAutomationCore/scripts/netbox_sync.py
-    ```
+## ansible-agent
 
-## 4. Sync Network Intent
-To sync all existing sites in the inventory:
-```bash
-# This script scans NetworkInventoryData/intent/sites/* for all site and device data
-python3 ../NetworkAutomationCore/scripts/netbox_sync.py
-```
+The agent container includes:
+- `ansible-core` with collections: `community.general`, `ansible.posix`, `netbox.netbox`, `ansible.utils`
+- `fping` for device discovery
+- `sshpass` for SONiC-VS SSH access
+- `pynetbox`, `pyyaml`, `netaddr`
 
-## Role Naming Convention
-We follow a 3-character role naming convention across the entire ecosystem:
-- `acc`: Access
-- `dis`: Distribution
-- `cor`: Core
-- `tra`: Transit
+Volume mounts (for local development):
+- `NetworkAutomationCore` → `/workspace/automation`
+- `NetworkInventoryData` → `/workspace/inventory`
+
+In production, Jenkins clones repos from GitHub into the agent workspace.
+
+## Jenkins Agent Setup
+
+1. Create a **Permanent Agent** node named `ansible-agent` with label `ansible-agent`
+2. Copy the agent secret from the Jenkins UI
+3. Set it and restart:
+   ```bash
+   JENKINS_AGENT_SECRET=<secret> docker-compose up -d ansible-agent
+   ```
