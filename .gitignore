@@ -1,0 +1,17 @@
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.backup
+.terraform.lock.hcl
+
+# Secrets
+.env
+*.key
+*.json # GCP Service Account keys
+
+# OS
+.DS_Store
+
+# Containerlab artifacts
+lab/clab-sre-lab/
+lab/*.log

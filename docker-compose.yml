@@ -1,0 +1,89 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    platform: linux/arm64
+    environment:
+      POSTGRES_DB: netbox
+      POSTGRES_USER: netbox
+      POSTGRES_PASSWORD: netboxpassword
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - sre-mgmt-net
+
+  redis:
+    image: redis:7-alpine
+    platform: linux/arm64
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+    volumes:
+      - redis_data:/data
+    networks:
+      - sre-mgmt-net
+
+  netbox:
+    image: netboxcommunity/netbox:v3.5
+    platform: linux/arm64
+    depends_on:
+      - postgres
+      - redis
+    ports:
+      - "8000:8080"
+    environment:
+      DB_HOST: postgres
+      DB_NAME: netbox
+      DB_USER: netbox
+      DB_PASSWORD: netboxpassword
+      REDIS_HOST: redis
+      REDIS_CACHE_HOST: redis
+      SECRET_KEY: "t7k!p9#mR2xLwQzYv5uJ8nBdA3fGhSc6eTbXoMiKaPjWqUrNsDl"
+      ALLOWED_HOSTS: "*"
+    volumes:
+      - netbox_data:/etc/netbox/media
+    networks:
+      - sre-mgmt-net
+
+  jenkins:
+    image: jenkins/jenkins:lts
+    platform: linux/arm64
+    environment:
+      JAVA_OPTS: "-Dhudson.plugins.git.GitSCM.ALLOW_LOCAL_CHECKOUT=true"
+    ports:
+      - "8080:8080"
+      - "50000:50000"
+    volumes:
+      - jenkins_home:/var/jenkins_home
+      - ../JenkinsSharedLibraries:/var/jenkins_repos/shared-library:ro
+    networks:
+      - sre-mgmt-net
+
+  ansible-agent:
+    build:
+      context: ./docker/ansible-agent
+    init: true
+    depends_on:
+      - jenkins
+    environment:
+      JENKINS_URL: "http://jenkins:8080"
+      JENKINS_AGENT_NAME: "ansible-agent"
+      JENKINS_SECRET: "${JENKINS_AGENT_SECRET:-}"
+      JENKINS_AGENT_WEB_SOCKET: "true"
+    # In production, Jenkins clones repos from GitHub into the agent workspace.
+    # These local mounts are for development/testing only.
+    volumes:
+      - ../NetworkAutomationCore:/workspace/automation
+      - ../NetworkInventoryData:/workspace/inventory
+    networks:
+      - sre-mgmt-net
+
+networks:
+  sre-mgmt-net:
+    external: true
+
+volumes:
+  postgres_data:
+  redis_data:
+  netbox_data:
+  jenkins_home:
